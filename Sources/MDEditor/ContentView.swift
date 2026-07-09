@@ -43,10 +43,14 @@ struct ContentView: View {
                             Button("폴더 추가…") { addFolder() }
                             Divider()
                             Button("이름 바꾸기") { beginRename(item.node) }
-                            if isRoot(item.node) {
-                                Button("사이드바에서 제거") { removeRoot(item.node) }
+                            if item.node.isDirectory {
+                                // 폴더는 디스크에서 삭제하지 않음. 최상위 폴더만 사이드바에서 제거 가능.
+                                if isRoot(item.node) {
+                                    Button("사이드바에서 제거") { removeRoot(item.node) }
+                                }
+                            } else {
+                                Button("삭제(휴지통으로)", role: .destructive) { delete(item.node) }
                             }
-                            Button("삭제(휴지통으로)", role: .destructive) { delete(item.node) }
                         }
                 }
             }
@@ -180,8 +184,9 @@ struct ContentView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "추가"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard !roots.contains(where: { $0.url == url }) else {
+        guard panel.runModal() == .OK, let picked = panel.url else { return }
+        let url = picked.standardizedFileURL
+        guard !roots.contains(where: { $0.url.standardizedFileURL.path == url.path }) else {
             statusMessage = "이미 추가된 폴더"
             return
         }
