@@ -3,7 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @Bindable var state: EditorState
-    @State private var root: FileNode
+    @State private var roots: [FileNode]         // 사이드바 최상위 폴더들 (VS Code 다중 폴더)
     @State private var text: String = ""
     @State private var dirty = false
     @State private var statusMessage = ""
@@ -16,13 +16,19 @@ struct ContentView: View {
 
     init(rootURL: URL, state: EditorState) {
         self.state = state
-        _root = State(initialValue: FileNode(url: rootURL, isDirectory: true))
+        // 저장된 폴더 목록이 있으면 복원, 없으면 시작 폴더 하나
+        let saved = (UserDefaults.standard.stringArray(forKey: "folders") ?? [])
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        let list = saved.isEmpty ? [rootURL] : saved
+        _roots = State(initialValue: list.map { FileNode(url: $0, isDirectory: true) })
+        _expanded = State(initialValue: Set(list))   // 최상위 폴더는 기본 펼침
     }
 
     var body: some View {
         NavigationSplitView {
             List {
-                ForEach(flatten(root.children ?? []), id: \.node) { item in
+                ForEach(flatten(roots), id: \.node) { item in
                     row(for: item.node, depth: item.depth)
                         .contentShape(Rectangle())
                         .listRowBackground(state.selectedFile == item.node
@@ -34,18 +40,23 @@ struct ContentView: View {
                         .contextMenu {
                             Button("새 파일") { newFile(in: item.node) }
                             Button("새 폴더") { newFolder(in: item.node) }
+                            Button("폴더 추가…") { addFolder() }
                             Divider()
                             Button("이름 바꾸기") { beginRename(item.node) }
+                            if isRoot(item.node) {
+                                Button("사이드바에서 제거") { removeRoot(item.node) }
+                            }
                             Button("삭제(휴지통으로)", role: .destructive) { delete(item.node) }
                         }
                 }
             }
-            // 빈 공간(최상위) 우클릭 → 루트에 새로 만들기
+            // 빈 공간 우클릭
             .contextMenu {
                 Button("새 파일") { newFile(in: nil) }
                 Button("새 폴더") { newFolder(in: nil) }
+                Button("폴더 추가…") { addFolder() }
             }
-            .navigationTitle(root.name)
+            .navigationTitle("폴더")
             .onKeyPress(.return) {
                 guard let sel = state.selectedFile, renamingNode == nil else { return .ignored }
                 beginRename(sel)
@@ -57,7 +68,7 @@ struct ContentView: View {
                         .keyboardShortcut("n", modifiers: .command)
                 }
                 ToolbarItem {
-                    Button("폴더 열기", systemImage: "folder.badge.plus") { openFolder() }
+                    Button("폴더 추가", systemImage: "folder.badge.plus") { addFolder() }
                         .keyboardShortcut("o", modifiers: [.command, .shift])
                 }
             }
@@ -156,25 +167,46 @@ struct ContentView: View {
         .padding(.leading, CGFloat(depth) * 14)
     }
 
-    private func openFolder() {
+    private func isRoot(_ node: FileNode) -> Bool { roots.contains { $0.url == node.url } }
+
+    private func persistRoots() {
+        UserDefaults.standard.set(roots.map { $0.url.path }, forKey: "folders")
+    }
+
+    // 기존 폴더를 사이드바에 추가 (VS Code "작업 공간에 폴더 추가")
+    private func addFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            autosave(state.selectedFile)
-            root = FileNode(url: url, isDirectory: true)
-            expanded = []
-            state.selectedFile = nil
-            text = ""
-            UserDefaults.standard.set(url.path, forKey: "lastFolder")   // 다음 실행 때 이 폴더로 시작
+        panel.prompt = "추가"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard !roots.contains(where: { $0.url == url }) else {
+            statusMessage = "이미 추가된 폴더"
+            return
         }
+        roots.append(FileNode(url: url, isDirectory: true))
+        expanded.insert(url)
+        persistRoots()
     }
 
-    // 대상 폴더 결정: 선택 항목이 폴더면 그 안, 파일이면 같은 폴더, 없으면 루트
+    // 사이드바에서만 제거(디스크의 폴더는 그대로)
+    private func removeRoot(_ node: FileNode) {
+        roots.removeAll { $0.url == node.url }
+        expanded.remove(node.url)
+        if state.selectedFile?.url.path.hasPrefix(node.url.path) == true {
+            state.selectedFile = nil
+            text = ""
+        }
+        persistRoots()
+    }
+
+    // 대상 폴더 결정: 선택 항목이 폴더면 그 안, 파일이면 같은 폴더, 없으면 첫 최상위 폴더
     private func targetDir(_ node: FileNode?) -> URL {
         let base = node ?? state.selectedFile
-        guard let base else { return root.url }
+        guard let base else {
+            return roots.first?.url ?? FileManager.default.homeDirectoryForCurrentUser
+        }
         return base.isDirectory ? base.url : base.url.deletingLastPathComponent()
     }
 
@@ -277,7 +309,7 @@ struct ContentView: View {
     }
 
     private func reloadTree() {
-        root = FileNode(url: root.url, isDirectory: true)
+        roots = roots.map { FileNode(url: $0.url, isDirectory: true) }
     }
 
     private func load(_ node: FileNode?) {
