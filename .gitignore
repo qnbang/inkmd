@@ -1,0 +1,4 @@
+.build/
+*.zip
+아이콘/*.iconset/
+.DS_Store
