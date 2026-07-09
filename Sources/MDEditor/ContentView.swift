@@ -13,6 +13,7 @@ struct ContentView: View {
     @FocusState private var focusedRenameNode: FileNode?
     @State private var showPreview = false
     @State private var expanded: Set<URL> = []
+    @State private var loading = false           // 파일 불러오는 중 표시(가짜 '수정' 방지)
 
     init(rootURL: URL, state: EditorState) {
         self.state = state
@@ -84,7 +85,7 @@ struct ContentView: View {
                                 onCellEdit: editTableCell)
                 } else {
                     MarkdownTextView(text: $text, controller: state.controller)
-                        .onChange(of: text) { dirty = true }
+                        .onChange(of: text) { if !loading { dirty = true } }   // 불러오기 중 변경은 '수정'으로 치지 않음
                 }
                 HStack {
                     Text(state.selectedFile?.url.path ?? "왼쪽에서 .md 파일을 선택하세요")
@@ -319,9 +320,11 @@ struct ContentView: View {
 
     private func load(_ node: FileNode?) {
         guard let node, !node.isDirectory else { return }
+        loading = true
         text = (try? String(contentsOf: node.url, encoding: .utf8)) ?? ""
         dirty = false
         statusMessage = ""
+        DispatchQueue.main.async { loading = false }   // onChange(text) 처리 이후 해제
     }
 
     // 미리보기에서 표 칸을 고치면 원문 해당 줄의 칸을 바꿔 반영 + 저장
