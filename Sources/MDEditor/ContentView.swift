@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var renamingNode: FileNode?
     @State private var renameText: String = ""
     @FocusState private var focusedRenameNode: FileNode?
+    @State private var showPreview = false
 
     init(rootURL: URL, state: EditorState) {
         self.state = state
@@ -47,8 +48,12 @@ struct ContentView: View {
             }
         } detail: {
             VStack(spacing: 0) {
-                MarkdownTextView(text: $text, controller: state.controller)
-                    .onChange(of: text) { dirty = true }
+                if showPreview {
+                    PreviewView(markdown: text, baseURL: state.selectedFile?.url.deletingLastPathComponent())
+                } else {
+                    MarkdownTextView(text: $text, controller: state.controller)
+                        .onChange(of: text) { dirty = true }
+                }
                 HStack {
                     Text(state.selectedFile?.url.path ?? "왼쪽에서 .md 파일을 선택하세요")
                         .font(.caption)
@@ -72,6 +77,14 @@ struct ContentView: View {
                         Button("굵게", systemImage: "bold") { state.controller.toggleBold() }
                         Button("기울임", systemImage: "italic") { state.controller.toggleItalic() }
                     }
+                    .disabled(state.selectedFile == nil || showPreview)
+                }
+                ToolbarItem {
+                    Button(showPreview ? "편집" : "미리보기",
+                           systemImage: showPreview ? "pencil" : "eye") {
+                        showPreview.toggle()   // 미리보기는 live text 바인딩을 그대로 렌더(저장 불필요)
+                    }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
                     .disabled(state.selectedFile == nil)
                 }
             }

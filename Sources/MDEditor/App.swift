@@ -1,9 +1,13 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 // ponytail: raw SwiftPM executables aren't launched via LaunchServices, so
 // NSApplication never gets told to become a regular foreground app on its own.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+    private var snapWeb: WKWebView?
+    private var snapPath: String?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 숨은 검증 모드: --snapshot <출력.png> 로 실행하면 실제 앱의 하이라이팅으로 렌더한 이미지를 저장하고 종료
         if let i = CommandLine.arguments.firstIndex(of: "--snapshot"),
@@ -12,9 +16,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // 숨은 검증 모드: --previewshot <출력.png> — 미리보기 웹뷰를 렌더해 저장(비동기라 로드 후 캡처)
+        if let i = CommandLine.arguments.firstIndex(of: "--previewshot"),
+           i + 1 < CommandLine.arguments.count {
+            renderPreviewShot(to: CommandLine.arguments[i + 1])
+            return  // didFinish에서 캡처 후 종료
+        }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
+    }
+
+    private func renderPreviewShot(to path: String) {
+        snapPath = path
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 420, height: 300))
+        web.navigationDelegate = self
+        let md = "# 제목\n\n| 이름 | 값 |\n|:----|----:|\n| 가 | 10 |\n| 나 | 20 |\n\n- 목록 하나\n- 목록 둘"
+        web.loadHTMLString(PreviewView.page(Markdown.toHTML(md)), baseURL: nil)
+        snapWeb = web
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let cfg = WKSnapshotConfiguration()
+        webView.takeSnapshot(with: cfg) { [weak self] image, _ in
+            if let image, let tiff = image.tiffRepresentation,
+               let rep = NSBitmapImageRep(data: tiff),
+               let png = rep.representation(using: .png, properties: [:]),
+               let path = self?.snapPath {
+                try? png.write(to: URL(fileURLWithPath: path))
+            }
+            NSApp.terminate(nil)
+        }
     }
 
     static func renderSnapshot(to path: String) {
