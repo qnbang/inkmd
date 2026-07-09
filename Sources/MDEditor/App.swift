@@ -75,13 +75,19 @@ struct MDEditorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var editorState = EditorState()
 
+    // 마지막에 연 폴더를 기억, 없으면 문서 폴더로 시작 (경로 하드코딩 금지)
+    static var startFolder: URL {
+        if let saved = UserDefaults.standard.string(forKey: "lastFolder") {
+            let u = URL(fileURLWithPath: saved)
+            if FileManager.default.fileExists(atPath: u.path) { return u }
+        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                rootURL: FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("Documents/claude-workspace"),
-                state: editorState
-            )
+            ContentView(rootURL: Self.startFolder, state: editorState)
         }
         .windowStyle(.automatic)
         .defaultSize(width: 1100, height: 700)

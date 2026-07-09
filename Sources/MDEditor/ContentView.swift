@@ -156,8 +156,10 @@ struct ContentView: View {
         if panel.runModal() == .OK, let url = panel.url {
             autosave(state.selectedFile)
             root = FileNode(url: url, isDirectory: true)
+            expanded = []
             state.selectedFile = nil
             text = ""
+            UserDefaults.standard.set(url.path, forKey: "lastFolder")   // 다음 실행 때 이 폴더로 시작
         }
     }
 
