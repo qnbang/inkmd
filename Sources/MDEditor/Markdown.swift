@@ -124,6 +124,17 @@ enum Markdown {
         return t.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
+    /// 표 한 줄에서 col번째 칸을 새 값으로 바꿔 다시 마크다운 줄로 조립 (미리보기 편집용)
+    static func replacingCell(in line: String, col: Int, with value: String) -> String {
+        var cs = cells(line)
+        guard col < cs.count else { return line }
+        cs[col] = value
+            .replacingOccurrences(of: "|", with: " ")   // 칸 구분자 깨짐 방지
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return "| " + cs.joined(separator: " | ") + " |"
+    }
+
     private static func parseTable(_ lines: [String], from start: Int) -> (String, Int) {
         let header = cells(lines[start])
         let aligns = cells(lines[start + 1]).map { spec -> String in
@@ -137,15 +148,20 @@ enum Markdown {
             i < aligns.count && !aligns[i].isEmpty ? " style=\"text-align:\(aligns[i])\"" : ""
         }
 
+        // data-line/data-col = 원문에서의 줄·칸 위치 → 미리보기에서 칸 편집 시 원문에 되반영
         var html = "<table>\n<thead><tr>"
-        for (idx, h) in header.enumerated() { html += "<th\(align(idx))>\(inline(h))</th>" }
+        for (idx, h) in header.enumerated() {
+            html += "<th\(align(idx)) contenteditable data-line=\"\(start)\" data-col=\"\(idx)\">\(inline(h))</th>"
+        }
         html += "</tr></thead>\n<tbody>\n"
 
         var i = start + 2
         while i < lines.count, isTableRow(lines[i]) {
             let row = cells(lines[i])
             html += "<tr>"
-            for (idx, c) in row.enumerated() { html += "<td\(align(idx))>\(inline(c))</td>" }
+            for (idx, c) in row.enumerated() {
+                html += "<td\(align(idx)) contenteditable data-line=\"\(i)\" data-col=\"\(idx)\">\(inline(c))</td>"
+            }
             html += "</tr>\n"
             i += 1
         }

@@ -29,10 +29,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     private func renderPreviewShot(to path: String) {
         snapPath = path
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 420, height: 300))
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 720, height: 1400))
         web.navigationDelegate = self
-        let md = "# 제목\n\n| 이름 | 값 |\n|:----|----:|\n| 가 | 10 |\n| 나 | 20 |\n\n- 목록 하나\n- 목록 둘"
-        web.loadHTMLString(PreviewView.page(Markdown.toHTML(md)), baseURL: nil)
+        // --previewfile <md> 가 있으면 그 파일을, 없으면 샘플을 렌더
+        var md = "# 제목\n\n| 이름 | 값 |\n|:----|----:|\n| 가 | 10 |\n| 나 | 20 |\n\n- 목록 하나\n- 목록 둘"
+        var base: URL? = nil
+        if let j = CommandLine.arguments.firstIndex(of: "--previewfile"), j + 1 < CommandLine.arguments.count {
+            let u = URL(fileURLWithPath: CommandLine.arguments[j + 1])
+            if let s = try? String(contentsOf: u, encoding: .utf8) { md = s; base = u.deletingLastPathComponent() }
+        }
+        web.loadHTMLString(PreviewView.renderedPage(md, baseURL: base), baseURL: base)
         snapWeb = web
     }
 

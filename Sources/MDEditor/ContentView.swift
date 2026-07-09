@@ -49,7 +49,9 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 if showPreview {
-                    PreviewView(markdown: text, baseURL: state.selectedFile?.url.deletingLastPathComponent())
+                    PreviewView(markdown: text,
+                                baseURL: state.selectedFile?.url.deletingLastPathComponent(),
+                                onCellEdit: editTableCell)
                 } else {
                     MarkdownTextView(text: $text, controller: state.controller)
                         .onChange(of: text) { dirty = true }
@@ -216,6 +218,18 @@ struct ContentView: View {
         text = (try? String(contentsOf: node.url, encoding: .utf8)) ?? ""
         dirty = false
         statusMessage = ""
+    }
+
+    // 미리보기에서 표 칸을 고치면 원문 해당 줄의 칸을 바꿔 반영 + 저장
+    private func editTableCell(line: Int, col: Int, value: String) {
+        var lines = text.components(separatedBy: "\n")
+        guard line < lines.count else { return }
+        let updated = Markdown.replacingCell(in: lines[line], col: col, with: value)
+        guard updated != lines[line] else { return }
+        lines[line] = updated
+        text = lines.joined(separator: "\n")
+        dirty = true
+        save()
     }
 
     // iOS 메모 앱처럼: 다른 파일로 넘어가기 전에 지금 파일을 조용히 저장
