@@ -204,6 +204,15 @@ struct MarkdownTextView: NSViewRepresentable {
                 storage.addAttribute(.backgroundColor, value: NSColor.systemGray.withAlphaComponent(0.18), range: content)
             }
 
+            // 표: `|`로 이뤄진 줄은 고정폭 글꼴로 → 칸이 세로로 정렬돼 표처럼 읽힘
+            highlight(storage, in: full, pattern: #"^\s*\|.*\|\s*$"#, options: [.anchorsMatchLines]) { range in
+                storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: baseSize - 1, weight: .regular), range: range)
+            }
+            // 표 구분선(|---|:--:|)은 문법 표시라 흐리게
+            highlight(storage, in: full, pattern: #"^\s*\|[\s:|-]+\|\s*$"#, options: [.anchorsMatchLines]) { range in
+                storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: range)
+            }
+
             storage.endEditing()
         }
 

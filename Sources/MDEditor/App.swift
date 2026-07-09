@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static func renderSnapshot(to path: String) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 420, height: 220))
         tv.textContainerInset = NSSize(width: 16, height: 16)
-        tv.string = "1. 사과\n2. 배\n- 포도\n일반 문장입니다\n# 제목입니다"
+        tv.string = "# 제목입니다\n1. 사과\n- 포도\n\n| 이름 | 값 |\n|------|-----|\n| 가   | 10  |\n| 나   | 20  |"
         // 앱과 똑같은 Coordinator로 하이라이팅
         let view = MarkdownTextView(text: .constant(tv.string), controller: EditorController())
         view.makeCoordinator().applyHighlighting(tv.textStorage!)
