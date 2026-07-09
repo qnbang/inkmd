@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var renameText: String = ""
     @FocusState private var focusedRenameNode: FileNode?
     @State private var showPreview = false
+    @State private var expanded: Set<URL> = []
 
     init(rootURL: URL, state: EditorState) {
         self.state = state
@@ -20,13 +21,19 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $state.selectedFile) {
-                OutlineGroup(root.children ?? [], id: \.self, children: \.children) { node in
-                    row(for: node)
-                        .tag(node)
+            List {
+                ForEach(flatten(root.children ?? []), id: \.node) { item in
+                    row(for: item.node, depth: item.depth)
+                        .contentShape(Rectangle())
+                        .listRowBackground(state.selectedFile == item.node
+                            ? Color.accentColor.opacity(0.22) : Color.clear)
+                        .onTapGesture {
+                            if item.node.isDirectory { toggleFolder(item.node) }
+                            else { state.selectedFile = item.node }
+                        }
                         .contextMenu {
-                            Button("이름 바꾸기") { beginRename(node) }
-                            Button("삭제(휴지통으로)", role: .destructive) { delete(node) }
+                            Button("이름 바꾸기") { beginRename(item.node) }
+                            Button("삭제(휴지통으로)", role: .destructive) { delete(item.node) }
                         }
                 }
             }
@@ -97,18 +104,48 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private func row(for node: FileNode) -> some View {
-        if renamingNode == node {
-            TextField("", text: $renameText)
-                .textFieldStyle(.plain)
-                .focused($focusedRenameNode, equals: node)
-                .onSubmit { commitRename(node) }
-                .onExitCommand { renamingNode = nil }
-        } else {
-            Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
-                .onTapGesture(count: 2) { beginRename(node) }
+    // 펼쳐진 폴더 목록만 담아 화면에 그릴 행들을 depth와 함께 평탄화 (VS Code식 트리)
+    private func flatten(_ nodes: [FileNode], depth: Int = 0) -> [(node: FileNode, depth: Int)] {
+        var out: [(FileNode, Int)] = []
+        for n in nodes {
+            out.append((n, depth))
+            if n.isDirectory, expanded.contains(n.url), let ch = n.children {
+                out.append(contentsOf: flatten(ch, depth: depth + 1))
+            }
         }
+        return out
+    }
+
+    private func toggleFolder(_ node: FileNode) {
+        if expanded.contains(node.url) { expanded.remove(node.url) }
+        else { expanded.insert(node.url) }
+    }
+
+    @ViewBuilder
+    private func row(for node: FileNode, depth: Int) -> some View {
+        HStack(spacing: 4) {
+            if node.isDirectory {
+                Image(systemName: expanded.contains(node.url) ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11)
+                Image(systemName: "folder.fill").foregroundStyle(.secondary)
+            } else {
+                Spacer().frame(width: 11)
+                Image(systemName: "doc.text").foregroundStyle(.secondary)
+            }
+            if renamingNode == node {
+                TextField("", text: $renameText)
+                    .textFieldStyle(.plain)
+                    .focused($focusedRenameNode, equals: node)
+                    .onSubmit { commitRename(node) }
+                    .onExitCommand { renamingNode = nil }
+            } else {
+                Text(node.name)
+                    .onTapGesture(count: 2) { beginRename(node) }
+            }
+        }
+        .padding(.leading, CGFloat(depth) * 14)
     }
 
     private func openFolder() {
