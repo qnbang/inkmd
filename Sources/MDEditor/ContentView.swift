@@ -32,10 +32,18 @@ struct ContentView: View {
                             else { state.selectedFile = item.node }
                         }
                         .contextMenu {
+                            Button("새 파일") { newFile(in: item.node) }
+                            Button("새 폴더") { newFolder(in: item.node) }
+                            Divider()
                             Button("이름 바꾸기") { beginRename(item.node) }
                             Button("삭제(휴지통으로)", role: .destructive) { delete(item.node) }
                         }
                 }
+            }
+            // 빈 공간(최상위) 우클릭 → 루트에 새로 만들기
+            .contextMenu {
+                Button("새 파일") { newFile(in: nil) }
+                Button("새 폴더") { newFolder(in: nil) }
             }
             .navigationTitle(root.name)
             .onKeyPress(.return) {
@@ -163,27 +171,47 @@ struct ContentView: View {
         }
     }
 
-    private func newFile() {
-        let targetDir: URL
-        if let sel = state.selectedFile {
-            targetDir = sel.isDirectory ? sel.url : sel.url.deletingLastPathComponent()
-        } else {
-            targetDir = root.url
-        }
+    // 대상 폴더 결정: 선택 항목이 폴더면 그 안, 파일이면 같은 폴더, 없으면 루트
+    private func targetDir(_ node: FileNode?) -> URL {
+        let base = node ?? state.selectedFile
+        guard let base else { return root.url }
+        return base.isDirectory ? base.url : base.url.deletingLastPathComponent()
+    }
 
-        guard let name = promptForName(title: "새 마크다운 파일", confirmTitle: "만들기", info: targetDir.path) else { return }
+    private func newFile(in node: FileNode? = nil) {
+        let dir = targetDir(node)
+        guard let name = promptForName(title: "새 마크다운 파일", confirmTitle: "만들기", info: dir.path) else { return }
         var fileName = name
         if !fileName.lowercased().hasSuffix(".md") { fileName += ".md" }
 
-        let newURL = targetDir.appendingPathComponent(fileName)
+        let newURL = dir.appendingPathComponent(fileName)
         guard !FileManager.default.fileExists(atPath: newURL.path) else {
             statusMessage = "이미 있는 파일: \(fileName)"
             return
         }
         FileManager.default.createFile(atPath: newURL.path, contents: Data())
 
+        if let node, node.isDirectory { expanded.insert(node.url) }   // 폴더 안에 만들면 펼쳐서 보이게
         reloadTree()
         state.selectedFile = FileNode(url: newURL, isDirectory: false)
+    }
+
+    private func newFolder(in node: FileNode? = nil) {
+        let dir = targetDir(node)
+        guard let name = promptForName(title: "새 폴더", confirmTitle: "만들기", info: dir.path) else { return }
+        let newURL = dir.appendingPathComponent(name)
+        guard !FileManager.default.fileExists(atPath: newURL.path) else {
+            statusMessage = "이미 있는 폴더: \(name)"
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(at: newURL, withIntermediateDirectories: false)
+            if let node, node.isDirectory { expanded.insert(node.url) }
+            expanded.insert(newURL)
+            reloadTree()
+        } catch {
+            statusMessage = "폴더 생성 실패: \(error.localizedDescription)"
+        }
     }
 
     private func beginRename(_ node: FileNode) {
